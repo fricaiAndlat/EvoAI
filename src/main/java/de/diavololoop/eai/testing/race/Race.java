@@ -20,7 +20,7 @@ public class Race {
         Track track = new Track();
 
 
-        Simulator<Car> simulator = new Simulator<>(track, createPopulation(), getOption(), Race::evolve);
+        //Simulator<Car> simulator = new Simulator<>(track, createPopulation(), getOption(), Race::evolve);
 
 
 
@@ -38,7 +38,9 @@ public class Race {
                 .orElse(0);
 
 
-        individualListMap.entrySet()
+        //individualListMap.entrySet()
+
+        return null;
 
 
     }
