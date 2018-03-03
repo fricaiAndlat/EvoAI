@@ -1,16 +1,14 @@
 package de.diavololoop.eai.testing.race;
 
-import com.sun.javafx.geom.Vec2d;
-import com.sun.javafx.geom.Vec3d;
 import de.diavololoop.eai.individual.Individual;
 import de.diavololoop.eai.simulation.ISimulation;
+import org.joml.Intersectiond;
+import org.joml.Vector2d;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.LinkedList;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
 
 public class Track extends JFrame implements ISimulation<Car> {
 
@@ -79,19 +77,19 @@ public class Track extends JFrame implements ISimulation<Car> {
 
             streets = result;
             repaint();
-
+            /*
             try {
-                Thread.sleep(1000);
+                Thread.sleep( 1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            }
+            }*/
 
             //System.out.println("length: "+result.size());
 
             if (result.size() >= minLength) {
 
                 System.out.println("init found: "+init);
-
+                repaint();
                 return result;
             }
 
@@ -101,20 +99,21 @@ public class Track extends JFrame implements ISimulation<Car> {
     private List<Street> createStreet(int width, int height, long init) {
 
         double tileLength = 40;
+        double borderWidth = 40;
 
         StreetFinder finder = new StreetFinder(init);
 
-        Vec3d nextPoint = new Vec3d(0, 0, 0);
-        Vec3d point = new Vec3d(1, 40, 0);
+        Vector2d nextPoint = new Vector2d(0, 0);
+        Vector2d point = new Vector2d(1, 40);
 
-        List<Street> result = new LinkedList<Street>();
+        LinkedList<Street> result = new LinkedList<>();
 
         while (true) {
 
 
 
             nextPoint.set(point);
-            Vec3d dir = finder.nextDirection();
+            Vector2d dir = finder.nextDirection();
             dir.mul(tileLength);
             nextPoint.add(dir);
 
@@ -122,7 +121,7 @@ public class Track extends JFrame implements ISimulation<Car> {
 
             Street nextStreet = new Street(point, nextPoint);
 
-            if (result.size() > 2 && result.stream().limit(result.size()-3).anyMatch(e -> e.crossInner(nextStreet))) {
+            if (result.stream().anyMatch(e -> e.crossInner(nextStreet))) {
                 break;
             }
 
@@ -130,12 +129,21 @@ public class Track extends JFrame implements ISimulation<Car> {
                 break;
             }
 
-            result.add(nextStreet);
+            nextStreet.createBorder(borderWidth);
+
+            if (result.size() > 0) {
+                nextStreet.linkBack(result.getLast());
+            }
+
+            if (result.stream().anyMatch(e -> e.crossOuter(nextStreet))) {
+                break;
+            }
+
+            result.addLast(nextStreet);
             point.set(nextPoint);
-
-
-
         }
+
+
         return result;
 
 
@@ -146,18 +154,18 @@ public class Track extends JFrame implements ISimulation<Car> {
 
         Random RAND;
 
-        Vec3d direction = new Vec3d(1, 0, 0);
+        Vector2d direction = new Vector2d(1, 0);
         double angle = 0;
         double a0 = 0;
         double a1 = 0;
-        double maxA = 0.001;
+        double maxA = 0.9;
 
 
         public StreetFinder(long init) {
             RAND = new Random(init);
         }
 
-        public Vec3d nextDirection() {
+        public Vector2d nextDirection() {
 
             a1 = (RAND.nextDouble() * 2 - 1) * maxA;
 
@@ -167,12 +175,12 @@ public class Track extends JFrame implements ISimulation<Car> {
 
             //a0 = (RAND.nextDouble() * 2 - 1) * maxA;
 
-            //a0 = Math.min(1, Math.max(-1, a0));
+            a0 = Math.min(2, Math.max(-2, a0));
 
             angle += a0;
 
 
-            direction.set(Math.cos(angle), Math.sin(angle), 0);
+            direction.set(Math.cos(angle), Math.sin(angle));
 
             return direction;
         }
@@ -181,131 +189,105 @@ public class Track extends JFrame implements ISimulation<Car> {
     }
 
     private class Street {
-        Vec3d roadStart = new Vec3d();
-        Vec3d roadEnd   = new Vec3d();
+        Vector2d roadStart = new Vector2d();
+        Vector2d roadEnd   = new Vector2d();
 
-        Vec3d leftStart = new Vec3d();
-        Vec3d leftEnd   = new Vec3d();
+        Vector2d leftStart = new Vector2d();
+        Vector2d leftEnd   = new Vector2d();
 
-        Vec3d rightStart = new Vec3d();
-        Vec3d rightEnd   = new Vec3d();
+        Vector2d rightStart = new Vector2d();
+        Vector2d rightEnd   = new Vector2d();
 
-        public Street(Vec3d start, Vec3d end) {
+        Polygon polygon;
+
+        public Street(Vector2d start, Vector2d end) {
             roadStart.set(start);
             roadEnd.set(end);
         }
 
         public boolean crossInner(Street street) {
+            return cross(roadStart, roadEnd, street.roadStart, street.roadEnd);
+        }
 
-            Vec3d n = new Vec3d(this.roadEnd);
-            n.sub(this.roadStart);
-            n.set(n.y, -n.x, 0);
+        public boolean crossOuter(Street street) {
 
-            Vec3d s = new Vec3d(this.roadStart);
-            Vec3d p = new Vec3d(street.roadStart);
-            Vec3d u = new Vec3d(street.roadEnd);
-            u.sub(street.roadStart);
+            return cross(leftStart, leftEnd, street.leftStart, street.leftEnd)
+                    || cross(leftStart, leftEnd, street.rightStart, street.rightEnd)
+                    || cross(rightStart, rightEnd, street.leftStart, street.leftEnd)
+                    || cross(rightStart, rightEnd, street.rightStart, street.rightEnd);
 
-            s.sub(p);
-            double v1 = s.dot(n);
-            double v2 = u.dot(n);
+        }
 
-            if (v2 == 0) {
-                return false;
+        public Polygon getPolygon() {
+
+            if (polygon == null) {
+                polygon = new Polygon();
+                polygon.addPoint((int)leftStart.x, (int)leftStart.y);
+                polygon.addPoint((int)leftEnd.x, (int)leftEnd.y);
+                polygon.addPoint((int)rightEnd.x, (int)rightEnd.y);
+                polygon.addPoint((int)rightStart.x, (int)rightStart.y);
             }
 
-            double alpha = v1 / v2;
+            return polygon;
+        }
 
-            if (alpha < 0 || alpha > u.length()) {
-                return false;
-            }
-
-            //+++++
-
-            n.set(street.roadEnd);
-            n.sub(street.roadStart);
-            n.set(n.y, -n.x, 0);
-
-            s.set(street.roadStart);
-            p.set(this.roadStart);
-            u.set(this.roadEnd);
-            u.sub(this.roadStart);
-
-            s.sub(p);
-            v1 = s.dot(n);
-            v2 = u.dot(n);
-
-            if (v2 == 0) {
-                return false;
-            }
-
-            alpha = v1 / v2;
-
-            if (alpha < 0 || alpha > u.length()) {
-                return false;
-            }
-
-            /*double EPSILON = 0;
-
-            //calc as this as plane
-            //n = (y, -x);
-            Vec3d n = new Vec3d(this.roadEnd);
-            n.sub(this.roadStart);
-            n.set(n.y, -n.x, 0);
-
-            //--
-            Vec3d temp = new Vec3d(this.roadStart);
-            temp.sub(street.roadStart);
-            double v1 = temp.dot(n);
-
-            temp.set(street.roadEnd);
-            temp.sub(street.roadStart);
-            double v2 = temp.dot(n);
-
-            if(v2 == 0) {
-                return false;
-            }
-
-            double alpha = v1 / v2;
-
-            //System.out.println(alpha);
-
-            if (alpha <= EPSILON || alpha - temp.length() >= -EPSILON) {
-                return false;
-            }
-            System.out.println("------------------------");
-            System.out.printf("alpha %f, length %f \r\n", alpha, temp.length());
-
-            //calc other as plane
-            n.set(street.roadEnd);
-            n.sub(street.roadStart);
-            n.set(n.y, -n.x, 0);
-
-            temp.set(street.roadStart);
-            temp.sub(this.roadStart);
-            v1 = temp.dot(n);
-            temp.set(this.roadEnd);
-            temp.sub(this.roadStart);
-            v2 = temp.dot(n);
-
-            if(v2 == 0) {
-                return false;
-            }
-
-            alpha = v1 / v2;
-            //System.out.println(alpha);
-
-            if (alpha <= EPSILON || alpha - temp.length() >= -EPSILON) {
-                return false;
-            }
-            System.out.printf("alpha %f, length %f \r\n", alpha, temp.length());
-            */System.out.printf("(%f; %f), (%f; %f)\r\n", roadStart.x, roadStart.y, roadEnd.x, roadEnd.y);
-            System.out.printf("(%f; %f), (%f; %f)\r\n", street.roadStart.x, street.roadStart.y, street.roadEnd.x, street.roadEnd.y);
-
-            System.out.println("not valid");
+        private boolean cross(Vector2d s1, Vector2d s2, Vector2d u1, Vector2d u2) {
+            Vector2d dir = new Vector2d(s2);
+            dir.sub(s1);
+            double alpha = Intersectiond.intersectRayLineSegment(s1, dir, u1, u2);
 
 
-            return true;
+            return alpha > 0.01 && alpha < 0.99;
+        }
+
+        public void linkBack(Street street) {
+
+
+            Vector2d result = new Vector2d();
+
+            Intersectiond.intersectLineLine(
+                    leftStart.x, leftStart.y, 
+                    leftEnd.x, leftEnd.y,
+                    street.leftStart.x, street.leftStart.y, 
+                    street.leftEnd.x, street.leftEnd.y,
+                    result);
+            
+            leftStart.set(result);
+            street.leftEnd.set(result);
+
+            Intersectiond.intersectLineLine(
+                    rightStart.x, rightStart.y,
+                    rightEnd.x, rightEnd.y,
+                    street.rightStart.x, street.rightStart.y,
+                    street.rightEnd.x, street.rightEnd.y,
+                    result);
+            rightStart.set(result);
+            street.rightEnd.set(result);
+
+        }
+
+        public void createBorder(double width) {
+
+            Vector2d dir = new Vector2d(roadEnd);
+            dir.sub(roadStart);
+
+            Vector2d n = new Vector2d(dir);
+            n.normalize(width);
+            n.set(-n.y, n.x);
+
+            rightStart = new Vector2d(roadStart);
+            rightStart.add(n);
+
+            rightEnd = new Vector2d(rightStart);
+            rightEnd.add(dir);
+
+            n.mul(-1);
+
+            leftStart = new Vector2d(roadStart);
+            leftStart.add(n);
+
+            leftEnd = new Vector2d(leftStart);
+            leftEnd.add(dir);
 
         }
     }
@@ -327,6 +309,16 @@ public class Track extends JFrame implements ISimulation<Car> {
 
             streets.forEach(s -> {
                 g.drawLine((int)s.roadStart.x, (int)s.roadStart.y, (int)s.roadEnd.x, (int)s.roadEnd.y);
+
+                if (s.leftStart == null) {
+                    return;
+                }
+                g.setColor(Color.WHITE);
+                g.fillPolygon(s.getPolygon());
+
+                g.setColor(Color.BLACK);
+                g.drawLine((int)s.leftStart.x, (int)s.leftStart.y, (int)s.leftEnd.x, (int)s.leftEnd.y);
+                g.drawLine((int)s.rightStart.x, (int)s.rightStart.y, (int)s.rightEnd.x, (int)s.rightEnd.y);
             });
         }
     }
