@@ -24,12 +24,16 @@ public class Track extends JFrame implements ISimulation<Car> {
 
         add(new Panel(), BorderLayout.CENTER);
 
-        new Thread(() -> reset()).start();
+        new Thread(() -> {
+            reset();
+            reset();
+            reset();
+            reset();
+        }).start();
 
         setVisible(true);
 
     }
-
 
     @Override
     public void reset() {
@@ -67,8 +71,18 @@ public class Track extends JFrame implements ISimulation<Car> {
         return null;
     }
 
+    private double getScoreFor(Vector2d pos) {
+        streets.stream()
+                .sorted((a, b) ->
+                        Intersectiond.distancePointLine(pos.x, pos.y, a.roadStart.x, a.roadStart.y, a.roadEnd.x, a.roadEnd.y)
+                        - Intersectiond.distancePointLine(pos.x, pos.y, b.roadStart.x, b.roadStart.y, b.roadEnd.x, b.roadEnd.y)
+                         > 0 ? 1 : -1)
+                .findAny();
+        return 0;
+    }
+
+    static long init = 0;
     private List<Street> createStreetMin(int width, int height, int minLength) {
-        long init = 2;
 
         while(true) {
 
@@ -77,14 +91,6 @@ public class Track extends JFrame implements ISimulation<Car> {
 
             streets = result;
             repaint();
-            /*
-            try {
-                Thread.sleep( 1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }*/
-
-            //System.out.println("length: "+result.size());
 
             if (result.size() >= minLength) {
 
@@ -104,7 +110,7 @@ public class Track extends JFrame implements ISimulation<Car> {
         StreetFinder finder = new StreetFinder(init);
 
         Vector2d nextPoint = new Vector2d(0, 0);
-        Vector2d point = new Vector2d(1, 40);
+        Vector2d point = new Vector2d(1, borderWidth + 20);
 
         LinkedList<Street> result = new LinkedList<>();
 
@@ -125,10 +131,6 @@ public class Track extends JFrame implements ISimulation<Car> {
                 break;
             }
 
-            if (nextPoint.x < 0 || nextPoint.y < 0 || nextPoint.x > width || nextPoint.y > height) {
-                break;
-            }
-
             nextStreet.createBorder(borderWidth);
 
             if (result.size() > 0) {
@@ -136,6 +138,10 @@ public class Track extends JFrame implements ISimulation<Car> {
             }
 
             if (result.stream().anyMatch(e -> e.crossOuter(nextStreet))) {
+                break;
+            }
+
+            if (nextStreet.isOutOfBounds(0, 0, width, height)) {
                 break;
             }
 
@@ -175,7 +181,7 @@ public class Track extends JFrame implements ISimulation<Car> {
 
             //a0 = (RAND.nextDouble() * 2 - 1) * maxA;
 
-            a0 = Math.min(2, Math.max(-2, a0));
+            a0 = Math.min(1, Math.max(-1, a0));
 
             angle += a0;
 
@@ -237,7 +243,7 @@ public class Track extends JFrame implements ISimulation<Car> {
             double alpha = Intersectiond.intersectRayLineSegment(s1, dir, u1, u2);
 
 
-            return alpha > 0.01 && alpha < 0.99;
+            return alpha > 0.0001 && alpha < 0.9999;
         }
 
         public void linkBack(Street street) {
@@ -290,6 +296,19 @@ public class Track extends JFrame implements ISimulation<Car> {
             leftEnd.add(dir);
 
         }
+
+        public boolean isOutOfBounds(int x0, int y0, int x1, int y1) {
+            return isOutOfBounds(roadStart, x0, y0, x1, y1)
+                    || isOutOfBounds(roadEnd, x0, y0, x1, y1)
+                    || isOutOfBounds(leftStart, x0, y0, x1, y1)
+                    || isOutOfBounds(leftEnd, x0, y0, x1, y1)
+                    || isOutOfBounds(rightStart, x0, y0, x1, y1)
+                    || isOutOfBounds(rightEnd, x0, y0, x1, y1);
+        }
+
+        private boolean isOutOfBounds(Vector2d vec, int x0, int y0, int x1, int y1) {
+            return vec.x < x0 || vec.y < y0 || vec.x > x1 || vec.y > y1;
+        }
     }
 
     public class Panel extends JPanel {
@@ -319,6 +338,15 @@ public class Track extends JFrame implements ISimulation<Car> {
                 g.setColor(Color.BLACK);
                 g.drawLine((int)s.leftStart.x, (int)s.leftStart.y, (int)s.leftEnd.x, (int)s.leftEnd.y);
                 g.drawLine((int)s.rightStart.x, (int)s.rightStart.y, (int)s.rightEnd.x, (int)s.rightEnd.y);
+
+                g.setColor(Color.BLUE);
+
+                g.fillPolygon(streets.stream()
+                        .sorted((a, b) ->
+                                Intersectiond.distancePointLine(1, 1, a.roadStart.x, a.roadStart.y, a.roadEnd.x, a.roadEnd.y)
+                                        - Intersectiond.distancePointLine(1, 1, b.roadStart.x, b.roadStart.y, b.roadEnd.x, b.roadEnd.y)
+                                        > 0 ? 1 : -1)
+                        .findAny().get().getPolygon());
             });
         }
     }
